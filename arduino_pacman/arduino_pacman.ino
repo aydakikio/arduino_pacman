@@ -12,6 +12,9 @@ U8G2_SH1106_128X64_NONAME_2_HW_I2C u8g2(U8G2_R3, -1, A5, A4);
 // Game state
 bool game_over = false;
 
+const unsigned char heart_bits[] PROGMEM = {
+  0x6C, 0xFE, 0xFE, 0xFE, 0x7C,0x38, 0x10
+};
 // Forward declaration
 void draw_game();
 void setup() {
@@ -83,14 +86,20 @@ void draw_borders(){
   u8g2.drawHLine(0, 127, 64);
 }
 
+
+void draw_food(){
+  
+}
+
 void draw_game(){
   u8g2.firstPage();
   do {
-    
+
     draw_borders();
 
     //u8g2.drawHLine(0,10,128);
-    //u8g2.drawFrame(0, 0, 40, 15);
-
+    //THe ghost container
+    //u8g2.drawFrame(20,60 , 24, 16);
+    u8g2.drawXBMP(20, 60, 8, 7, heart_bits);
   } while (u8g2.nextPage());
 }
