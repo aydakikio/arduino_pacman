@@ -11,12 +11,17 @@ U8G2_SH1106_128X64_NONAME_2_HW_I2C u8g2(U8G2_R3, -1, A5, A4);
 
 // Game state
 bool game_over = false;
+uint8_t current_direction;
+uint8_t next_direction;
+int score= 0;
 
-const unsigned char heart_bits[] PROGMEM = {
+const unsigned char food_bits[] PROGMEM = {
   0x6C, 0xFE, 0xFE, 0xFE, 0x7C,0x38, 0x10
 };
 // Forward declaration
 void draw_game();
+void handle_controls();
+
 void setup() {
   // put your setup code here, to run once:
   u8g2.begin();
@@ -31,16 +36,24 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   if(!game_over){
+    handle_controls();
     draw_game();
   }
 }
 
+void handle_controls(){
+  if (digitalRead(BTN_UP) == LOW)    next_direction = 1;
+  if (digitalRead(BTN_RIGHT) == LOW) next_direction = 2;
+  if (digitalRead(BTN_DOWN) == LOW)  next_direction = 3;
+  if (digitalRead(BTN_LEFT) == LOW)  next_direction = 4;
 
+}
 void draw_borders(){
 
   u8g2.setFont(u8g2_font_4x6_tf);
   u8g2.drawStr(1, 6, "Score:\ ");
-
+  u8g2.setCursor(33, 6);
+  u8g2.print(score);
 
   u8g2.drawHLine(0, 10, 63);
 
@@ -87,6 +100,7 @@ void draw_borders(){
 }
 
 
+
 void draw_food(){
   
 }
@@ -99,7 +113,16 @@ void draw_game(){
 
     //u8g2.drawHLine(0,10,128);
     //THe ghost container
-    //u8g2.drawFrame(20,60 , 24, 16);
-    u8g2.drawXBMP(20, 60, 8, 7, heart_bits);
+    u8g2.drawFrame(20,60 , 24, 16);
+
+    
+    u8g2.drawFrame(15, 24,10, 5);
+    u8g2.drawFrame(20, 24, 5, 10);
+
+
+    u8g2.drawFilledEllipse(7, 17, 4, 4);
+
+    
+    //u8g2.drawXBMP(15, 60, 8, 7, food_bits);
   } while (u8g2.nextPage());
 }
