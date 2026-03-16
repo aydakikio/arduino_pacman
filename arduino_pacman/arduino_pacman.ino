@@ -21,12 +21,12 @@ U8G2_SH1106_128X64_NONAME_2_HW_I2C u8g2(U8G2_R3, -1, A5, A4);
 
 //=== Sprites ===
 const unsigned char packman_openmouth_bits[] PROGMEM = {
-  0x1F, 0x1A, 0x1C, 0x1E, 0x0F
-};
-const unsigned char packman_closemouth[] PROGMEM = {
-  0x0E, 0x1B, 0x1F, 0x1F, 0x0E
+  0x7,0xA,0xE, 0x7
 };
 
+const unsigned char packman_closemouth[] PROGMEM = {
+  0x6, 0xB, 0xF, 0x6
+};
 
 //==== Game State ====
 bool game_over = false;
@@ -143,7 +143,7 @@ void draw_packman() {
   int px = 2 + (packman.x * map_grid);
   int py = 14 + (packman.y * map_grid);
 
-  u8g2.drawXBMP(px + 1, py + 1, 5, 5, packman_openmouth_bits);
+  u8g2.drawXBMP(px + 1, py + 1, 4, 4, packman_openmouth_bits);
 }
 
 void draw_game() {
