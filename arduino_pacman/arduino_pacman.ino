@@ -19,6 +19,18 @@ U8G2_SH1106_128X64_NONAME_2_HW_I2C u8g2(U8G2_R3, -1, A5, A4);
 #define P 2 // Pellet (Food)
 #define B 3 // Big Power Pellet
 
+// ==== Direction Constants ====
+#define DIR_NONE  0
+#define DIR_UP    1
+#define DIR_RIGHT 2
+#define DIR_DOWN  3
+#define DIR_LEFT  4
+
+#define MOVE_DELAY 100
+
+bool mouth_open   = true;
+unsigned long last_move_time = 0;
+
 //=== Sprites ===
 const unsigned char packman_openmouth_bits[] PROGMEM = {
   0x7,0xA,0xE, 0x7
@@ -31,6 +43,7 @@ const unsigned char packman_closemouth[] PROGMEM = {
 //==== Game State ====
 bool game_over = false;
 int score = 0;
+bool is_moving = false;
 
 //==== Game objects ====
 struct Packman {
@@ -52,10 +65,10 @@ uint8_t game_map[19][10] = {
   {W,B,W,W,P,P,W,W,B,W}, // 2 - Power Pellets
   {W,P,P,P,P,P,P,P,P,W}, // 3
   {W,W,W,P,W,W,P,W,W,W}, // 4
-  {E,E,E,P,W,W,P,E,E,E}, // 5 - Side Tunnels
+  {E,E,W,P,W,W,P,W,E,E}, // 5 - Side Tunnels
   {W,W,W,P,W,W,P,W,W,W}, // 6
   {W,P,P,P,P,P,P,P,P,W}, // 7
-  {W,P,W,W,E,E,W,W,P,W}, // 8 - Ghost Box Top
+  {W,P,W,W,W,W,W,W,P,W}, // 8 - Ghost Box Top
   {W,P,W,E,E,E,E,W,P,W}, // 9 - Ghost Box Center
   {W,P,W,W,W,W,W,W,P,W}, // 10- Ghost Box Bottom
   {W,P,P,P,P,P,P,P,P,W}, // 11
@@ -71,6 +84,7 @@ uint8_t game_map[19][10] = {
 // Forward declaration
 void draw_game();
 void handle_controls();
+void move_packman();
 
 void setup() {
   u8g2.begin();
@@ -84,21 +98,109 @@ void setup() {
   packman.x = 4;
   packman.y = 15;
   packman.lives = 3;
+
+  last_move_time = millis();
+
 }
 
 void loop() {
   if (!game_over) {
     handle_controls();
+    move_packman();
     // Add movement logic here later
     draw_game();
   }
 }
 
+bool is_walkable(int col, int row) {
+  // Boundary check
+  if (col < 0 || col >= 10 || row < 0 || row >= 19) return false;
+  uint8_t tile = game_map[row][col];
+  return (tile == E || tile == P || tile == B);
+}
+
+void eat_tile() {
+  uint8_t tile = game_map[packman.y][packman.x];
+  if (tile == P) {
+    game_map[packman.y][packman.x] = E;
+    score += 10;
+  } else if (tile == B) {
+    game_map[packman.y][packman.x] = E;
+    score += 50;
+    //make the ghosts eatable
+  }
+}
+
+bool reached_end() {
+  int nx = packman.x;
+  int ny = packman.y;
+
+  switch (packman.current_direction) {
+    case DIR_UP:    ny -= 1; break;
+    case DIR_DOWN:  ny += 1; break;
+    case DIR_RIGHT: nx += 1; break;
+    case DIR_LEFT:  nx -= 1; break;
+    default: return false; 
+  }
+
+  return (game_map[ny][nx] == W);  
+}
+
+
+void move_packman() {
+  unsigned long now = millis();
+  if (now - last_move_time < MOVE_DELAY) return;
+  last_move_time = now;
+
+  if(reached_end()){
+    packman.current_direction = DIR_NONE;
+  }
+
+  // --- Try to turn toward next_direction first ---
+  int nx = packman.x;
+  int ny = packman.y;
+
+  if (packman.next_direction == DIR_UP)    ny -= 1;
+  if (packman.next_direction == DIR_RIGHT) nx += 1;
+  if (packman.next_direction == DIR_DOWN)  ny += 1;
+  if (packman.next_direction == DIR_LEFT)  nx -= 1;
+
+  if (packman.next_direction != DIR_NONE && is_walkable(nx, ny)) {
+
+    packman.current_direction = packman.next_direction;
+    packman.next_direction    = DIR_NONE;
+    packman.x = nx;
+    packman.y = ny;
+    eat_tile();
+    return;
+  }
+
+  // --- Keep going in current_direction ---
+  nx = packman.x;
+  ny = packman.y;
+
+  if (packman.current_direction == DIR_UP)    ny -= 1;
+  if (packman.current_direction == DIR_RIGHT) nx += 1;
+  if (packman.current_direction == DIR_DOWN)  ny += 1;
+  if (packman.current_direction == DIR_LEFT)  nx -= 1;
+
+  if (packman.current_direction != DIR_NONE && is_walkable(nx, ny)) {
+    packman.x = nx;
+    packman.y = ny;
+    eat_tile();
+  }
+
+  if(reached_end()){
+    is_moving = false;
+    packman.current_direction = DIR_NONE;
+  }
+}
+
 void handle_controls() {
-  if (digitalRead(BTN_UP) == LOW)    packman.next_direction = 1;
-  if (digitalRead(BTN_RIGHT) == LOW) packman.next_direction = 2;
-  if (digitalRead(BTN_DOWN) == LOW)  packman.next_direction = 3;
-  if (digitalRead(BTN_LEFT) == LOW)  packman.next_direction = 4;
+  if (digitalRead(BTN_UP) == LOW)    packman.next_direction = DIR_UP;
+  if (digitalRead(BTN_RIGHT) == LOW) packman.next_direction = DIR_RIGHT;
+  if (digitalRead(BTN_DOWN) == LOW)  packman.next_direction = DIR_DOWN;
+  if (digitalRead(BTN_LEFT) == LOW)  packman.next_direction = DIR_LEFT;
 }
 
 void draw_ui() {
@@ -143,6 +245,19 @@ void draw_packman() {
   int px = 2 + (packman.x * map_grid);
   int py = 14 + (packman.y * map_grid);
 
+  switch (packman.current_direction) {
+    case DIR_UP:
+      if (mouth_open){
+        
+      }
+    break;
+    case DIR_DOWN:
+    break;
+    case DIR_RIGHT:
+    break;
+    case DIR_LEFT:
+    break;
+  }
   u8g2.drawXBMP(px + 1, py + 1, 4, 4, packman_openmouth_bits);
 }
 
