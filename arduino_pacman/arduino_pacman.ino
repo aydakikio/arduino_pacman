@@ -231,6 +231,8 @@ void move_pacman() {
         frighten_ghosts();
         break;
     }
+  }else {
+    pacman_mouth_open = true;
   }
 }
 
