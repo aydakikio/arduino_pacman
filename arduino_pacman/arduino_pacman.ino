@@ -62,6 +62,7 @@ uint8_t game_map[19][10];
 
 //==== Game State ====
 bool game_over = false;
+bool is_pacman_moving = false;
 int score = 0;
 
 //===== Animation configuration ====== 
@@ -72,7 +73,7 @@ bool pacman_mouth_open = true;
 
 
 //==== Game objects ====
-struct pacman {
+struct Pacman {
   int x; 
   int y; 
   uint8_t lives;
@@ -91,13 +92,14 @@ struct Ghost {
   unsigned long exit_time;
 };
 
-pacman pacman;
+Pacman pacman;
 Ghost ghost[4];
 
 // Forward declarations
 void setup_game(bool on_gameover);
 void handle_controls();
 void draw_gameover();
+void move_pacman();
 void draw_game();
 
 void setup() {
@@ -115,6 +117,8 @@ void setup() {
 void loop() {
   if (!game_over) {
     handle_controls();
+    move_pacman();
+
     draw_game();
 
   }else {
@@ -137,17 +141,100 @@ void setup_game(bool on_gameover){
     memcpy(game_map, original_map, sizeof(game_map));
   }
 
+
+  is_pacman_moving= false;
+
   //init pacman
   pacman.x = 4;
   pacman.y = 15;
   pacman.current_direction=DIR_NONE;
   pacman.next_direction=DIR_NONE;
-  //Also some time for animation
+  pacman_last_move_time=0;
   
   //init ghosts
+  //Also some time for animation
 
 }
 
+void handle_controls(){
+  if (digitalRead(BTN_UP) == LOW && pacman.current_direction != DIR_DOWN) pacman.next_direction = DIR_UP;
+  if (digitalRead(BTN_RIGHT) == LOW && pacman.current_direction != DIR_LEFT) pacman.next_direction = DIR_RIGHT;
+  if (digitalRead(BTN_DOWN) == LOW && pacman.current_direction != DIR_UP) pacman.next_direction = DIR_DOWN;
+  if (digitalRead(BTN_LEFT) == LOW && pacman.current_direction != DIR_RIGHT) pacman.next_direction = DIR_LEFT;
+}
+
+bool is_walkable(int col, int row){
+  if (col < 0 || col >= 10 || row < 0 || row >= 19) return false;
+
+  uint8_t tile = game_map[row][col];
+  return (tile == E || tile == P || tile == B);
+}
+
+void frighten_ghosts(){
+
+}
+
+void chase_pacman(){
+
+}
+
+void move_pacman() {
+  unsigned long now = millis();
+  if (now - pacman_last_move_time < MOVE_DELAY) return;
+  pacman_last_move_time = now;
+
+  int next_x = pacman.x;
+  int next_y = pacman.y;
+
+  switch (pacman.next_direction) {
+    case DIR_UP:    next_y--; break;
+    case DIR_RIGHT: next_x++; break;
+    case DIR_DOWN:  next_y++; break;
+    case DIR_LEFT:  next_x--; break;
+  }
+
+  bool moved = false;
+
+  if (pacman.next_direction != DIR_NONE && is_walkable(next_x, next_y)) {
+    pacman.current_direction = pacman.next_direction;
+    pacman.x = next_x;
+    pacman.y = next_y;
+    moved = true;
+  } else {
+    next_x = pacman.x;
+    next_y = pacman.y;
+    switch (pacman.current_direction) {
+      case DIR_UP:    next_y--; break;
+      case DIR_RIGHT: next_x++; break;
+      case DIR_DOWN:  next_y++; break;
+      case DIR_LEFT:  next_x--; break;
+    }
+
+    if (pacman.current_direction != DIR_NONE && is_walkable(next_x, next_y)) {
+      pacman.x = next_x;
+      pacman.y = next_y;
+      moved = true;
+    }
+  }
+
+  if (moved) {
+    pacman_mouth_open = !pacman_mouth_open;
+
+    switch (game_map[pacman.y][pacman.x]) {
+      case P: // Food
+        game_map[pacman.y][pacman.x] = E;
+        score += 10;
+        break;
+      case B: // Power Pellet
+        game_map[pacman.y][pacman.x] = E;
+        score += 50;
+        frighten_ghosts();
+        break;
+    }
+  }
+}
+
+//========= RENDERING ===========
 void draw_map(){
   for(int row=0; row <19; row++){
     for(int col=0; col<10; col++){
@@ -168,64 +255,6 @@ void draw_map(){
           u8g2.drawBox(x + 1, y + 1, 4, 4);
         break;
       }
-    }
-  }
-}
-
-void handle_controls(){
-  if (digitalRead(BTN_UP) == LOW && pacman.current_direction != DIR_DOWN) pacman.next_direction = DIR_UP;
-  if (digitalRead(BTN_RIGHT) == LOW && pacman.current_direction != DIR_LEFT) pacman.next_direction = DIR_RIGHT;
-  if (digitalRead(BTN_DOWN) == LOW && pacman.current_direction != DIR_UP) pacman.next_direction = DIR_DOWN;
-  if (digitalRead(BTN_LEFT) == LOW && pacman.current_direction != DIR_RIGHT) pacman.next_direction = DIR_LEFT;
-}
-
-bool is_walkable(int col, int row){
-  if (col < 0 || col >= 10 || row < 0 || row >= 19) return false;
-
-  uint8_t tile = game_map[row][col];
-  return (tile == E || tile == P || tile == B);
-}
-
-void move_pacman(){
-  unsigned long now = millis();
-  if (now - pacman_last_move_time < MOVE_DELAY) return;
-  pacman_last_move_time = now;
-
-  //caculating new pacman position
-  int new_x = pacman.x;
-  int new_y = pacman.y;
-
-  switch (pacman.next_direction) {
-    case DIR_UP:
-      new_y--;
-    break;
-    case DIR_RIGHT:
-      new_x++;
-    break;
-    case DIR_DOWN:
-      new_y++;
-    break;
-    case DIR_LEFT:
-      new_x--;
-    break;
-  }
-
-  if(pacman.next_direction!=DIR_NONE && is_walkable(new_x, new_y)){
-    
-    pacman.x = new_x;
-    pacman.y = new_y;
-    pacman_mouth_open = !pacman_mouth_open;
-
-    uint8_t tile = map_grid[new_x][new_y];
-
-    switch (tile) {
-
-      case P://Food
-        //Eat tile
-      break;
-      case B://Power Bullet
-        //eat tile + put ghosts in frightened mode
-      break;
     }
   }
 }
@@ -292,9 +321,8 @@ void draw_game() {
     //horizenal
     u8g2.drawHLine(0, 12, 64);
 
+    
     draw_pacman();
-
-    //draw map
     draw_map();
 
   } while (u8g2.nextPage());
