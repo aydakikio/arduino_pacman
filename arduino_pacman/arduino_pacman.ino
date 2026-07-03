@@ -63,6 +63,7 @@ uint8_t game_map[19][10];
 //==== Game State ====
 bool game_over = false;
 bool is_pacman_moving = false;
+int total_pellets = 76;
 int score = 0;
 
 //===== Animation configuration ====== 
@@ -85,6 +86,7 @@ struct Ghost {
   int x;
   int y;
   uint8_t current_direction;
+  uint8_t next_direction;
   bool frightened;
   bool in_house;
   bool is_eaten;
@@ -170,12 +172,148 @@ bool is_walkable(int col, int row){
   return (tile == E || tile == P || tile == B);
 }
 
+int calculate_educian_distance(int delta_x , int delta_y){
+  return (delta_x*delta_x)+(delta_y*delta_y);
+}
+
+uint8_t get_best_direction(Ghost* ghost) {
+  int ghost_x = ghost->x;
+  int ghost_y = ghost->y;
+  uint8_t best_direction = ghost->current_direction;
+
+  int delta_x = ghost_x - pacman.x;
+  int delta_y = ghost_y - pacman.y;
+  int best_distance = calculate_educian_distance(delta_x, delta_y);
+
+  for (int i = 0; i < 4; i++) {
+    switch (i) {
+      case 0: { // up
+        if (ghost->current_direction == DIR_DOWN) continue;
+
+        int new_y = ghost_y - 1;
+        if (!is_walkable(ghost_x, new_y)) continue;
+
+        int new_delta_y = new_y - pacman.y;
+        int new_distance = calculate_educian_distance(delta_x, new_delta_y);
+        
+        if (new_distance < best_distance) {
+          best_distance = new_distance;
+          best_direction = DIR_UP;
+        }
+      break;
+      }
+      case 1: { // left
+        if (ghost->current_direction == DIR_RIGHT) continue;
+
+        int new_x = ghost_x - 1;
+        if (!is_walkable(new_x, ghost_y)) continue;
+
+        int new_delta_x = new_x - pacman.x;
+        int new_distance = calculate_educian_distance(new_delta_x, delta_y);
+
+        if (new_distance < best_distance) {
+          best_distance = new_distance;
+          best_direction = DIR_LEFT;
+        }
+      break;
+      }
+      case 2: { // down
+        if (ghost->current_direction == DIR_UP) continue;
+
+        int new_y = ghost_y + 1;
+        if (!is_walkable(ghost_x, new_y)) continue;
+
+        int new_delta_y = new_y - pacman.y;
+        int new_distance = calculate_educian_distance(delta_x, new_delta_y);
+
+        if (new_distance < best_distance) {
+          best_distance = new_distance;
+          best_direction = DIR_DOWN;
+        }
+      break;
+      }
+      case 3: { // right
+        if (ghost->current_direction == DIR_LEFT) continue;
+
+        int new_x = ghost_x + 1;
+        if (!is_walkable(new_x, ghost_y)) continue;
+
+        int new_delta_x = new_x - pacman.x;
+        int new_distance = calculate_educian_distance(new_delta_x, delta_y);
+
+        if (new_distance < best_distance) {
+          best_distance = new_distance;
+          best_direction = DIR_RIGHT;
+        }
+      break;
+      }
+    }
+  }
+
+  return best_direction;
+}
+
+void revert_direction(Ghost* ghost) {
+  switch (ghost->current_direction) {
+    case DIR_UP:    
+      ghost->next_direction = DIR_DOWN;  
+    break;
+    case DIR_LEFT:  
+      ghost->next_direction = DIR_RIGHT; 
+    break;
+    case DIR_DOWN:  
+      ghost->next_direction = DIR_UP;    
+    break; 
+    case DIR_RIGHT: 
+      ghost->next_direction = DIR_LEFT;  
+    break;
+  }
+}
+
+void pick_random_direction(Ghost* ghost){
+
+}
+
 void frighten_ghosts(){
 
 }
 
 void chase_pacman(){
+  for(int i=0; i<4; i++){
+    switch (i) {
+      case 0://blinky
+        uint8_t target_tile= game_map[pacman.y][pacman.x];
 
+      break;
+      case 1://pinky
+      break;
+      case 2://inky
+      break;
+      case 3://clyde
+      break;
+    }
+  }
+}
+
+void enter_scatter_mode(){
+  for(int i=0; i<4; i++){
+    switch (i) {
+      case 0://blinky
+      break;
+      case 1://pinky
+      break;
+      case 2://inky
+      break;
+      case 3://clyde
+      break;
+    }
+  }
+}
+
+void move_ghosts(){
+  for(int i=0; i<4; i++){
+
+  }
 }
 
 void move_pacman() {
@@ -224,10 +362,12 @@ void move_pacman() {
       case P: // Food
         game_map[pacman.y][pacman.x] = E;
         score += 10;
+        total_pellets--;
         break;
       case B: // Power Pellet
         game_map[pacman.y][pacman.x] = E;
         score += 50;
+        total_pellets--;
         frighten_ghosts();
         break;
     }
@@ -320,9 +460,8 @@ void draw_game() {
     u8g2.setCursor(32, 9);
     u8g2.print(score);
     
-    //horizenal
+    //horizenal divider line
     u8g2.drawHLine(0, 12, 64);
-
     
     draw_pacman();
     draw_map();
