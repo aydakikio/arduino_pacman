@@ -64,6 +64,8 @@ uint8_t game_map[19][10];
 bool game_over = false;
 bool is_pacman_moving = false;
 int total_pellets = 76;
+uint8_t ghost_mode = 0;
+bool reverse = false;
 int score = 0;
 
 //===== Animation configuration ====== 
@@ -87,15 +89,13 @@ struct Ghost {
   int y;
   uint8_t current_direction;
   uint8_t next_direction;
-  bool frightened;
   bool in_house;
   bool is_eaten;
-  unsigned long frightened_end;
   unsigned long exit_time;
 };
 
 Pacman pacman;
-Ghost ghost[4];
+Ghost ghosts[4];
 
 // Forward declarations
 void setup_game(bool on_gameover);
@@ -253,67 +253,135 @@ uint8_t get_best_direction(Ghost* ghost) {
   return best_direction;
 }
 
-void revert_direction(Ghost* ghost) {
+void reverce_direction(Ghost* ghost) {
   switch (ghost->current_direction) {
     case DIR_UP:    
-      ghost->next_direction = DIR_DOWN;  
+      ghost->current_direction = DIR_DOWN;  
     break;
     case DIR_LEFT:  
-      ghost->next_direction = DIR_RIGHT; 
+      ghost->current_direction = DIR_RIGHT; 
     break;
     case DIR_DOWN:  
-      ghost->next_direction = DIR_UP;    
+      ghost->current_direction = DIR_UP;    
     break; 
     case DIR_RIGHT: 
-      ghost->next_direction = DIR_LEFT;  
+      ghost->current_direction = DIR_LEFT;  
     break;
   }
 }
 
 void pick_random_direction(Ghost* ghost){
+  uint8_t directions[4] = {DIR_UP, DIR_LEFT, DIR_DOWN, DIR_RIGHT};
 
-}
+  int ghost_x = ghost->x; //col
+  int ghost_y = ghost->y; //row 
+  
+  for (int i = 3; i >= 0; i--) {
+    // Fisher-Yates shuffle
+    int j = random(0, i + 1);         
+    uint8_t temp = directions[i];
+    directions[i] = directions[j];
+    directions[j] = temp;
 
-void frighten_ghosts(){
+    uint8_t chosen_dir = directions[i];
+    int new_x = ghost_x;
+    int new_y = ghost_y;
 
-}
-
-void chase_pacman(){
-  for(int i=0; i<4; i++){
-    switch (i) {
-      case 0://blinky
-        uint8_t target_tile= game_map[pacman.y][pacman.x];
+    // Calculate the new coordinates based on the chosen direction
+    switch(chosen_dir){
+      case DIR_UP:{
+        if(ghost->current_direction == DIR_DOWN) continue;
+        new_y--; 
+      break;
+      }    
+      case DIR_DOWN:{
+        if(ghost->current_direction == DIR_UP) continue;
+        new_y++; 
+      break;
+      }
+      case DIR_LEFT:{  
+        if(ghost->current_direction == DIR_RIGHT) continue;
+        new_x--; 
+      break;
+      }
+      case DIR_RIGHT: {
+        if(ghost->current_direction == DIR_LEFT) continue;
+        new_x++;
 
       break;
-      case 1://pinky
-      break;
-      case 2://inky
-      break;
-      case 3://clyde
-      break;
+      }
+    }
+
+    // Check if the new position is valid
+    if(is_walkable(new_x, new_y)) {
+      ghost->x = new_x;
+      ghost->y = new_y;
+      ghost->next_direction = chosen_dir;
+      
+      return; 
     }
   }
 }
 
-void enter_scatter_mode(){
-  for(int i=0; i<4; i++){
-    switch (i) {
-      case 0://blinky
-      break;
-      case 1://pinky
-      break;
-      case 2://inky
-      break;
-      case 3://clyde
-      break;
+void chase_pacman(Ghost* ghost, int ghost_index){
+  switch (ghost_index) {
+    case 0:{//blinky
+      uint8_t target_tile= game_map[pacman.y][pacman.x];
+
+    break;
     }
+    case 1://pinky
+    break;
+    case 2://inky
+    break;
+    case 3://clyde
+    break;
+  }
+}
+
+void enter_scatter_mode(Ghost* ghost,int ghost_index){
+  switch (ghost_index) {
+    case 0://blinky
+    break;
+    case 1://pinky
+    break;
+    case 2://inky
+    break;
+    case 3://clyde
+    break;
   }
 }
 
 void move_ghosts(){
-  for(int i=0; i<4; i++){
 
+  for(int i = 0; i < 4; i++){
+    Ghost* ghost = &ghosts[i]; 
+
+    switch (ghost_mode) {
+      case 0: //chase
+        break;
+      case 1: //scatter
+        break;
+      case 2: { //frighten
+        if(reverse){
+          reverce_direction(ghost);
+        }
+
+        pick_random_direction(ghost);
+        
+        break;
+      }
+    }
+
+    //draw_ghost
+
+    //reset next direction
+    ghost-> next_direction = DIR_NONE;
   }
+
+  //reset global flags
+  reverse = false;
+
 }
 
 void move_pacman() {
@@ -368,7 +436,8 @@ void move_pacman() {
         game_map[pacman.y][pacman.x] = E;
         score += 50;
         total_pellets--;
-        frighten_ghosts();
+        ghost_mode=2;
+        reverse = true;
         break;
     }
   }else {
