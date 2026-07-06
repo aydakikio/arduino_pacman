@@ -1,4 +1,5 @@
 #include <U8g2lib.h>
+#include <limits.h>
 
 // ===== HARDWARE CONFIGURATION =====
 U8G2_SH1106_128X64_NONAME_2_HW_I2C u8g2(U8G2_R3, -1, A5, A4);
@@ -65,6 +66,7 @@ bool game_over = false;
 bool is_pacman_moving = false;
 int total_pellets = 76;
 uint8_t ghost_mode = 1;//start in scatter mode
+uint8_t ghosts_eaten_combo = 0;
 
 bool reverse = false;
 uint8_t level = 1;
@@ -102,10 +104,10 @@ Ghost ghosts[4];
 
 // Forward declarations
 void setup_game(bool on_gameover);
-void draw_ghost(Ghost* ghost);
 void handle_controls();
 void draw_gameover();
 void move_pacman();
+void move_ghosts();
 void draw_game();
 
 void setup() {
@@ -122,9 +124,14 @@ void setup() {
 
 void loop() {
   if (!game_over) {
+    //handle button press
     handle_controls();
-    move_pacman();
 
+    //move objects
+    move_pacman();
+    move_ghosts();
+
+    //render the game scene
     draw_game();
 
   }else {
@@ -159,6 +166,37 @@ void setup_game(bool on_gameover){
   
   //init ghosts
   //Also some time for animation
+    // Blinky — outside the house already
+    ghosts[0].x = 4;
+    ghosts[0].y = 7;
+    ghosts[0].direction = DIR_LEFT;
+    ghosts[0].in_house = false;
+    ghosts[0].is_eaten = false;
+    ghosts[0].exit_time = 0;
+
+    // Pinky — center left of house
+    ghosts[1].x = 3;
+    ghosts[1].y = 9;
+    ghosts[1].direction = DIR_UP;
+    ghosts[1].in_house = true;
+    ghosts[1].is_eaten = false;
+    ghosts[1].exit_time = millis() + 3000;  // exits after 3s
+
+    // Inky — center of house
+    ghosts[2].x = 4;
+    ghosts[2].y = 9;
+    ghosts[2].direction = DIR_UP;
+    ghosts[2].in_house = true;
+    ghosts[2].is_eaten = false;
+    ghosts[2].exit_time = millis() + 6000;  // exits after 6s
+
+    // Clyde — center right of house
+    ghosts[3].x = 5;
+    ghosts[3].y = 9;
+    ghosts[3].direction = DIR_UP;
+    ghosts[3].in_house = true;
+    ghosts[3].is_eaten = false;
+    ghosts[3].exit_time = millis() + 9000;  // exits after 9s
 
 }
 
@@ -168,6 +206,32 @@ void handle_controls(){
   if (digitalRead(BTN_DOWN) == LOW && pacman.current_direction != DIR_UP) pacman.next_direction = DIR_DOWN;
   if (digitalRead(BTN_LEFT) == LOW && pacman.current_direction != DIR_RIGHT) pacman.next_direction = DIR_LEFT;
 }
+
+
+void check_collisions(Ghost* ghost){
+  if(ghost->x== pacman.x && ghost->y==pacman.y){
+    if(ghost_mode==2){//It is in frightened mode..so pacman can eat that 
+      ghost->is_eaten = true;
+      ghosts_eaten_combo++;
+      
+      // 200 → 400 → 800 → 1600 per consecutive ghost
+      score += 100 * (1 << ghosts_eaten_combo);
+    }else{//ghost is chase or scatter mode...so..ghost kills Pac-Man
+      pacman.lives--;
+      
+      if(pacman.lives==0){
+        game_over=true;
+        return;
+      }
+
+      //reset positions without resetting score or map
+      setup_game(false);
+      return;
+    }
+  }
+}
+
+//========MOVEMENT and AI========
 
 bool is_walkable(int col, int row){
   if (col < 0 || col >= 10 || row < 0 || row >= 19) return false;
@@ -183,11 +247,12 @@ int calculate_educian_distance(int delta_x , int delta_y){
 uint8_t get_best_direction(Ghost* ghost,int target_x,int target_y) {
   int ghost_x = ghost->x;
   int ghost_y = ghost->y;
-  uint8_t best_direction = ghost->direction;
+  
+  uint8_t best_direction = DIR_NONE; 
+  int best_distance = INT_MAX;
 
   int delta_x = ghost_x - target_x;
   int delta_y = ghost_y - target_y;
-  int best_distance = calculate_educian_distance(delta_x, delta_y);
 
   for (int i = 0; i < 4; i++) {
     switch (i) {
@@ -484,13 +549,18 @@ void enter_eaten_mode(Ghost* ghost){
 }
 
 void move_ghosts(){
-
-  /*
-  Calculate the timers
-  */
-
   for(int i = 0; i < 4; i++){
     Ghost* ghost = &ghosts[i]; 
+
+    if (ghost->in_house) {
+      if (millis() >= ghost->exit_time) {
+        ghost->x = 4;    // center exit column
+        ghost->y = 7;    // one step outside the house
+        ghost->in_house = false;
+        ghost->direction = DIR_LEFT;
+      }
+      continue;  // don't move while still waiting inside
+    }
 
     if (ghost->is_eaten) {     
       enter_eaten_mode(ghost);
@@ -526,8 +596,7 @@ void move_ghosts(){
       }
     }
 
-    //draw_ghost
-    draw_ghost(ghost);
+    check_collisions(ghost);
   }
 
   //reset global flags
@@ -588,6 +657,7 @@ void move_pacman() {
         total_pellets--;
         ghost_mode=2;
         reverse = true;
+        ghosts_eaten_combo = 0;
         break;
     }
   }else {
@@ -685,9 +755,16 @@ void draw_game() {
     
     //horizenal divider line
     u8g2.drawHLine(0, 12, 64);
-    
-    draw_pacman();
+
     draw_map();
+    draw_pacman();
+
+    //draw ghosts
+    for(int i =0; i<4; i++){
+      Ghost* ghost = &ghosts[i]; 
+
+      draw_ghost(ghost);
+    }
 
   } while (u8g2.nextPage());
 }
