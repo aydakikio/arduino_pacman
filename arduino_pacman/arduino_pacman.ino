@@ -64,9 +64,13 @@ uint8_t game_map[19][10];
 bool game_over = false;
 bool is_pacman_moving = false;
 int total_pellets = 76;
-uint8_t ghost_mode = 0;
+uint8_t ghost_mode = 1;//start in scatter mode
+
 bool reverse = false;
+uint8_t level = 1;
 int score = 0;
+
+// timers for ghost modes
 
 //===== Animation configuration ====== 
 #define MOVE_DELAY 100
@@ -87,8 +91,7 @@ struct Pacman {
 struct Ghost {
   int x;
   int y;
-  uint8_t current_direction;
-  uint8_t next_direction;
+  uint8_t direction;
   bool in_house;
   bool is_eaten;
   unsigned long exit_time;
@@ -99,6 +102,7 @@ Ghost ghosts[4];
 
 // Forward declarations
 void setup_game(bool on_gameover);
+void draw_ghost(Ghost* ghost);
 void handle_controls();
 void draw_gameover();
 void move_pacman();
@@ -176,19 +180,19 @@ int calculate_educian_distance(int delta_x , int delta_y){
   return (delta_x*delta_x)+(delta_y*delta_y);
 }
 
-uint8_t get_best_direction(Ghost* ghost) {
+uint8_t get_best_direction(Ghost* ghost,int target_x,int target_y) {
   int ghost_x = ghost->x;
   int ghost_y = ghost->y;
-  uint8_t best_direction = ghost->current_direction;
+  uint8_t best_direction = ghost->direction;
 
-  int delta_x = ghost_x - pacman.x;
-  int delta_y = ghost_y - pacman.y;
+  int delta_x = ghost_x - target_x;
+  int delta_y = ghost_y - target_y;
   int best_distance = calculate_educian_distance(delta_x, delta_y);
 
   for (int i = 0; i < 4; i++) {
     switch (i) {
       case 0: { // up
-        if (ghost->current_direction == DIR_DOWN) continue;
+        if (ghost->direction == DIR_DOWN) continue;
 
         int new_y = ghost_y - 1;
         if (!is_walkable(ghost_x, new_y)) continue;
@@ -203,7 +207,7 @@ uint8_t get_best_direction(Ghost* ghost) {
       break;
       }
       case 1: { // left
-        if (ghost->current_direction == DIR_RIGHT) continue;
+        if (ghost->direction == DIR_RIGHT) continue;
 
         int new_x = ghost_x - 1;
         if (!is_walkable(new_x, ghost_y)) continue;
@@ -218,7 +222,7 @@ uint8_t get_best_direction(Ghost* ghost) {
       break;
       }
       case 2: { // down
-        if (ghost->current_direction == DIR_UP) continue;
+        if (ghost->direction == DIR_UP) continue;
 
         int new_y = ghost_y + 1;
         if (!is_walkable(ghost_x, new_y)) continue;
@@ -233,7 +237,7 @@ uint8_t get_best_direction(Ghost* ghost) {
       break;
       }
       case 3: { // right
-        if (ghost->current_direction == DIR_LEFT) continue;
+        if (ghost->direction == DIR_LEFT) continue;
 
         int new_x = ghost_x + 1;
         if (!is_walkable(new_x, ghost_y)) continue;
@@ -254,18 +258,18 @@ uint8_t get_best_direction(Ghost* ghost) {
 }
 
 void reverce_direction(Ghost* ghost) {
-  switch (ghost->current_direction) {
+  switch (ghost->direction) {
     case DIR_UP:    
-      ghost->current_direction = DIR_DOWN;  
+      ghost->direction = DIR_DOWN;  
     break;
     case DIR_LEFT:  
-      ghost->current_direction = DIR_RIGHT; 
+      ghost->direction = DIR_RIGHT; 
     break;
     case DIR_DOWN:  
-      ghost->current_direction = DIR_UP;    
+      ghost->direction = DIR_UP;    
     break; 
     case DIR_RIGHT: 
-      ghost->current_direction = DIR_LEFT;  
+      ghost->direction = DIR_LEFT;  
     break;
   }
 }
@@ -290,22 +294,22 @@ void pick_random_direction(Ghost* ghost){
     // Calculate the new coordinates based on the chosen direction
     switch(chosen_dir){
       case DIR_UP:{
-        if(ghost->current_direction == DIR_DOWN) continue;
+        if(ghost->direction == DIR_DOWN) continue;
         new_y--; 
       break;
       }    
       case DIR_DOWN:{
-        if(ghost->current_direction == DIR_UP) continue;
+        if(ghost->direction == DIR_UP) continue;
         new_y++; 
       break;
       }
       case DIR_LEFT:{  
-        if(ghost->current_direction == DIR_RIGHT) continue;
+        if(ghost->direction == DIR_RIGHT) continue;
         new_x--; 
       break;
       }
       case DIR_RIGHT: {
-        if(ghost->current_direction == DIR_LEFT) continue;
+        if(ghost->direction == DIR_LEFT) continue;
         new_x++;
 
       break;
@@ -316,7 +320,7 @@ void pick_random_direction(Ghost* ghost){
     if(is_walkable(new_x, new_y)) {
       ghost->x = new_x;
       ghost->y = new_y;
-      ghost->next_direction = chosen_dir;
+      ghost->direction = chosen_dir;
       
       return; 
     }
@@ -324,41 +328,145 @@ void pick_random_direction(Ghost* ghost){
 }
 
 void chase_pacman(Ghost* ghost, int ghost_index){
+  int target_x, target_y;
+
   switch (ghost_index) {
     case 0:{//blinky
-      uint8_t target_tile= game_map[pacman.y][pacman.x];
-
+      target_x = pacman.x;
+      target_y = pacman.y;
     break;
     }
-    case 1://pinky
+    case 1:{//pinky
+      target_x = pacman.x;
+      target_y = pacman.y;
+      
+      switch (pacman.current_direction) {
+        case DIR_UP:    target_y -= 4; break;
+        case DIR_DOWN:  target_y += 4; break;
+        case DIR_LEFT:  target_x -= 4; break;
+        case DIR_RIGHT: target_x += 4; break;
+      }
     break;
-    case 2://inky
+    }
+    case 2:{//inky
+      int pivot_x = pacman.x;
+      int pivot_y = pacman.y;
+      
+      switch (pacman.current_direction) {
+        case DIR_UP:    pivot_y -= 2; break;
+        case DIR_DOWN:  pivot_y += 2; break;
+        case DIR_LEFT:  pivot_x -= 2; break;
+        case DIR_RIGHT: pivot_x += 2; break;
+      }
+
+      // double the vector from Blinky to pivot
+      target_x = pivot_x + (pivot_x - ghosts[0].x);
+      target_y = pivot_y + (pivot_y - ghosts[0].y);
     break;
-    case 3://clyde
+    }
+    case 3:{//clyde
+      int dx = ghosts[3].x - pacman.x;
+      int dy = ghosts[3].y - pacman.y;
+      
+      if ((dx*dx + dy*dy) > 64) { // >8 tiles away
+        target_x = pacman.x;
+        target_y = pacman.y;
+      } else {// bottom-left scatter corner
+        target_x = 0; 
+        target_y = 18;
+      }
+      break;
+    }
+  }
+
+  //calculate next ghost position
+  ghost-> direction = get_best_direction(ghost, target_x, target_y);
+
+  switch (ghost->direction) {
+    case DIR_UP:{
+      ghost->y--;
     break;
+    }
+    case DIR_LEFT:{
+      ghost->x--;
+    break;
+    }
+    case DIR_DOWN:{
+      ghost->y++;
+    break;
+    }
+    case DIR_RIGHT:{
+      ghost->x--;
+    break;
+    }
   }
 }
 
 void enter_scatter_mode(Ghost* ghost,int ghost_index){
+  
+  int target_x, target_y;
+
   switch (ghost_index) {
-    case 0://blinky
+    case 0://Blinky — top-right
+      target_x = 9;
+      target_y = 0;
     break;
-    case 1://pinky
+    case 1://Pinky — top-left
+      target_x = 0;
+      target_y = 0;
     break;
-    case 2://inky
+    case 2://Inky — bottom-right
+      target_x = 9;
+      target_y = 18;
     break;
-    case 3://clyde
+    case 3://Clyde — bottom-left
+      target_x = 0;
+      target_y = 18;
     break;
   }
+
+  //calculate next ghost position
+  ghost-> direction = get_best_direction(ghost, target_x, target_y);
+
+  switch (ghost->direction) {
+    case DIR_UP:{
+      ghost->y--;
+    break;
+    }
+    case DIR_LEFT:{
+      ghost->x--;
+    break;
+    }
+    case DIR_DOWN:{
+      ghost->y++;
+    break;
+    }
+    case DIR_RIGHT:{
+      ghost->x--;
+    break;
+    }
+  }  
 }
 
 void move_ghosts(){
 
+  /*
+  Calculate the timers
+  */
+
   for(int i = 0; i < 4; i++){
     Ghost* ghost = &ghosts[i]; 
+    //what about eaten state?? I don't have any idea
 
     switch (ghost_mode) {
       case 0: //chase
+
+        if(reverse){//I make one for start of the mode and other for end
+          reverce_direction(ghost);
+        }
+
+        chase_pacman(ghost, i);
+
         break;
       case 1: //scatter
         break;
@@ -374,14 +482,11 @@ void move_ghosts(){
     }
 
     //draw_ghost
-
-    //reset next direction
-    ghost-> next_direction = DIR_NONE;
+    draw_ghost(ghost);
   }
 
   //reset global flags
   reverse = false;
-
 }
 
 void move_pacman() {
@@ -441,6 +546,7 @@ void move_pacman() {
         break;
     }
   }else {
+    pacman.current_direction= DIR_NONE;
     pacman_mouth_open = true;
   }
 }
@@ -470,8 +576,9 @@ void draw_map(){
   }
 }
 
-void draw_ghost(){
-  //Fill this later
+void draw_ghost(Ghost* ghost){
+
+  u8g2.drawXBMP(ghost->y, ghost->x, map_grid, map_grid, ghost_bits);
 }
 
 void draw_pacman(){
