@@ -197,7 +197,7 @@ uint8_t get_best_direction(Ghost* ghost,int target_x,int target_y) {
         int new_y = ghost_y - 1;
         if (!is_walkable(ghost_x, new_y)) continue;
 
-        int new_delta_y = new_y - pacman.y;
+        int new_delta_y = new_y - target_y;
         int new_distance = calculate_educian_distance(delta_x, new_delta_y);
         
         if (new_distance < best_distance) {
@@ -212,7 +212,7 @@ uint8_t get_best_direction(Ghost* ghost,int target_x,int target_y) {
         int new_x = ghost_x - 1;
         if (!is_walkable(new_x, ghost_y)) continue;
 
-        int new_delta_x = new_x - pacman.x;
+        int new_delta_x = new_x - target_x;
         int new_distance = calculate_educian_distance(new_delta_x, delta_y);
 
         if (new_distance < best_distance) {
@@ -227,7 +227,7 @@ uint8_t get_best_direction(Ghost* ghost,int target_x,int target_y) {
         int new_y = ghost_y + 1;
         if (!is_walkable(ghost_x, new_y)) continue;
 
-        int new_delta_y = new_y - pacman.y;
+        int new_delta_y = new_y - target_y;
         int new_distance = calculate_educian_distance(delta_x, new_delta_y);
 
         if (new_distance < best_distance) {
@@ -242,7 +242,7 @@ uint8_t get_best_direction(Ghost* ghost,int target_x,int target_y) {
         int new_x = ghost_x + 1;
         if (!is_walkable(new_x, ghost_y)) continue;
 
-        int new_delta_x = new_x - pacman.x;
+        int new_delta_x = new_x - target_x;
         int new_distance = calculate_educian_distance(new_delta_x, delta_y);
 
         if (new_distance < best_distance) {
@@ -396,7 +396,7 @@ void chase_pacman(Ghost* ghost, int ghost_index){
     break;
     }
     case DIR_RIGHT:{
-      ghost->x--;
+      ghost->x++;
     break;
     }
   }
@@ -442,10 +442,45 @@ void enter_scatter_mode(Ghost* ghost,int ghost_index){
     break;
     }
     case DIR_RIGHT:{
-      ghost->x--;
+      ghost->x++;
     break;
     }
   }  
+}
+
+void enter_eaten_mode(Ghost* ghost){
+  int target_x=4;
+  int target_y=7;
+
+  // arrived..go back into house
+  if(ghost->x== target_x && ghost->y== target_y){
+    ghost-> is_eaten = false;
+    ghost->in_house = true;
+
+    return;
+  }
+
+  int new_x = ghost->x, new_y = ghost->y;
+  uint8_t direction = get_best_direction(ghost, target_x, target_y);
+  switch (direction) {
+    case DIR_UP:    
+      new_y--; 
+    break;
+    case DIR_DOWN:  
+      new_y++; 
+    break;
+    case DIR_LEFT:  
+      new_x--; 
+    break;
+    case DIR_RIGHT: 
+      new_x++; 
+    break;
+  }
+  if (is_walkable(new_x, new_y)) {
+    ghost->x = new_x;
+    ghost->y = new_y;
+    ghost->direction = direction;
+  }
 }
 
 void move_ghosts(){
@@ -456,7 +491,11 @@ void move_ghosts(){
 
   for(int i = 0; i < 4; i++){
     Ghost* ghost = &ghosts[i]; 
-    //what about eaten state?? I don't have any idea
+
+    if (ghost->is_eaten) {     
+      enter_eaten_mode(ghost);
+      continue;                
+    }
 
     switch (ghost_mode) {
       case 0: //chase
@@ -469,6 +508,12 @@ void move_ghosts(){
 
         break;
       case 1: //scatter
+        if(reverse){
+          reverce_direction(ghost);
+        }
+
+        enter_scatter_mode(ghost, i);
+
         break;
       case 2: { //frighten
         if(reverse){
@@ -577,8 +622,10 @@ void draw_map(){
 }
 
 void draw_ghost(Ghost* ghost){
-
-  u8g2.drawXBMP(ghost->y, ghost->x, map_grid, map_grid, ghost_bits);
+  int gx = 2 + (ghost->x * map_grid);
+  int gy = 14 + (ghost->y * map_grid);
+  
+  u8g2.drawXBMP(gx, gy, map_grid, map_grid, ghost_bits);
 }
 
 void draw_pacman(){
