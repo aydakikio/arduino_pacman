@@ -68,6 +68,8 @@ uint8_t original_map[19][10] = {
 uint8_t game_map[19][10];
 
 //==== Game State ====
+#define LIFE_SCREEN_DURATION 2000
+
 bool game_over = false;
 bool is_pacman_moving = false;
 int total_pellets = 76;
@@ -75,7 +77,8 @@ uint8_t ghost_mode = 1;//start in scatter mode
 uint8_t ghosts_eaten_combo = 0;
 unsigned long ghost_mode_start = 0;
 unsigned long frightened_start  = 0;
-
+bool showing_life_screen = false;
+unsigned long life_screen_start = 0;
 bool reverse = false;
 int score = 0;
 
@@ -117,6 +120,7 @@ Ghost ghosts[4];
 
 // Forward declarations
 void setup_game(bool on_gameover);
+void draw_pacman_life_page();
 void handle_controls();
 void draw_gameover();
 void move_pacman();
@@ -136,23 +140,24 @@ void setup() {
 }
 
 void loop() {
-  if (!game_over) {
-    //handle button press
-    handle_controls();
-
-    //move objects
-    move_pacman();
-    move_ghosts();
-
-    //render the game scene
-    draw_game();
-
-  }else {
+  if (game_over) {
     draw_gameover();
-    
-    if (digitalRead(BTN_UP) == LOW || digitalRead(BTN_RIGHT) == LOW || digitalRead(BTN_DOWN) == LOW || digitalRead(BTN_LEFT) == LOW) { 
+    if (digitalRead(BTN_UP) == LOW || digitalRead(BTN_RIGHT) == LOW || digitalRead(BTN_DOWN) == LOW || digitalRead(BTN_LEFT) == LOW) {
       setup_game(true);
     }
+
+  } else if (showing_life_screen) {
+    draw_pacman_life_page();
+    if (millis() - life_screen_start >= LIFE_SCREEN_DURATION) {
+      showing_life_screen = false;
+      setup_game(false);  
+    }
+
+  } else {
+    handle_controls();
+    move_pacman();
+    move_ghosts();
+    draw_game();
   }
 }
 
@@ -237,8 +242,8 @@ void check_collisions(Ghost* ghost){
         return;
       }
 
-      //reset positions without resetting score or map
-      setup_game(false);
+      showing_life_screen = true;
+      life_screen_start = millis();
       return;
     }
   }
@@ -828,10 +833,20 @@ void draw_game() {
   } while (u8g2.nextPage());
 }
 
-void draw_pacman_life_page(){
+void draw_pacman_life_page() {
   u8g2.firstPage();
   do {
+    u8g2.setFont(u8g2_font_5x7_tf);
+    u8g2.drawStr(8, 50, "LIFE LOST!");
 
+    // Center hearts horizontally 
+    int heart_spacing = 7;  
+    int total_width = (pacman.lives * heart_spacing) - 2;
+    int start_x = (64 - total_width) / 2;
+
+    for (int i = 0; i < pacman.lives; i++) {
+      u8g2.drawXBMP(start_x + (i * heart_spacing), 65, 5, 5, heart_bits);
+    }
   } while (u8g2.nextPage());
 }
 
