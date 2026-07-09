@@ -18,8 +18,14 @@ const unsigned char pacman_openmouth_down_bits[] PROGMEM = {0x06, 0x0D, 0x0F, 0x
 const unsigned char pacman_openmouth_left_bits[] PROGMEM = {0x07, 0x0A, 0x0E, 0x07};
 const unsigned char pacman_openmouth_up_bits[] PROGMEM = {0x09, 0x0F, 0x0B, 0x06};
 
-const unsigned char ghost_bits[] PROGMEM = {0x0E, 0x15, 0x1F, 0x1F};
+const unsigned char ghost_frame_1_bits[] PROGMEM = {0x0E, 0x15, 0x1F, 0x15,};
+const unsigned char ghost_frame_2_bits[] PROGMEM = {0x0E, 0x15, 0x1F, 0x0A,};
 
+const unsigned char ghost_frightened_frame_1_bits[] PROGMEM = {0x0E, 0x11, 0x11, 0x1F, };
+const unsigned char ghost_frightened_frame_2_bits[] PROGMEM = {0x0E, 0x1F, 0x1F, 0x1F, };
+const unsigned char ghost_eyes_bits[] PROGMEM = {0x0A, 0x15, 0x1F, 0x0A, };
+
+const unsigned char heart_bits[] PROGMEM = {0x0A, 0x1F, 0x1F, 0x0E, 0x04,}; //5X5
 
 // ==== Direction Constants ====
 #define DIR_NONE 0
@@ -67,19 +73,26 @@ bool is_pacman_moving = false;
 int total_pellets = 76;
 uint8_t ghost_mode = 1;//start in scatter mode
 uint8_t ghosts_eaten_combo = 0;
+unsigned long ghost_mode_start = 0;
+unsigned long frightened_start  = 0;
 
 bool reverse = false;
-uint8_t level = 1;
 int score = 0;
 
 // timers for ghost modes
+const unsigned long SCATTER_DURATION   = 7000;
+const unsigned long CHASE_DURATION     = 20000;
+const unsigned long FRIGHTENED_DURATION = 8000;
 
 //===== Animation configuration ====== 
 #define MOVE_DELAY 100
+#define GHOST_ANIM_DELAY 200
 
 unsigned long pacman_last_move_time = 0 ;
 bool pacman_mouth_open = true;
 
+unsigned long ghost_last_anim_time = 0;
+bool ghost_anim_frame = false;
 
 //==== Game objects ====
 struct Pacman {
@@ -166,37 +179,37 @@ void setup_game(bool on_gameover){
   
   //init ghosts
   //Also some time for animation
-    // Blinky — outside the house already
-    ghosts[0].x = 4;
-    ghosts[0].y = 7;
-    ghosts[0].direction = DIR_LEFT;
-    ghosts[0].in_house = false;
-    ghosts[0].is_eaten = false;
-    ghosts[0].exit_time = 0;
+  // Blinky — outside the house already
+  ghosts[0].x = 4;
+  ghosts[0].y = 7;
+  ghosts[0].direction = DIR_LEFT;
+  ghosts[0].in_house = false;
+  ghosts[0].is_eaten = false;
+  ghosts[0].exit_time = 0;
 
-    // Pinky — center left of house
-    ghosts[1].x = 3;
-    ghosts[1].y = 9;
-    ghosts[1].direction = DIR_UP;
-    ghosts[1].in_house = true;
-    ghosts[1].is_eaten = false;
-    ghosts[1].exit_time = millis() + 3000;  // exits after 3s
+  // Pinky — center left of house
+  ghosts[1].x = 3;
+  ghosts[1].y = 9;
+  ghosts[1].direction = DIR_UP;
+  ghosts[1].in_house = true;
+  ghosts[1].is_eaten = false;
+  ghosts[1].exit_time = millis() + 3000;  // exits after 3s
 
-    // Inky — center of house
-    ghosts[2].x = 4;
-    ghosts[2].y = 9;
-    ghosts[2].direction = DIR_UP;
-    ghosts[2].in_house = true;
-    ghosts[2].is_eaten = false;
-    ghosts[2].exit_time = millis() + 6000;  // exits after 6s
+  // Inky — center of house
+  ghosts[2].x = 4;
+  ghosts[2].y = 9;
+  ghosts[2].direction = DIR_UP;
+  ghosts[2].in_house = true;
+  ghosts[2].is_eaten = false;
+  ghosts[2].exit_time = millis() + 6000;  // exits after 6s
 
-    // Clyde — center right of house
-    ghosts[3].x = 5;
-    ghosts[3].y = 9;
-    ghosts[3].direction = DIR_UP;
-    ghosts[3].in_house = true;
-    ghosts[3].is_eaten = false;
-    ghosts[3].exit_time = millis() + 9000;  // exits after 9s
+  // Clyde — center right of house
+  ghosts[3].x = 5;
+  ghosts[3].y = 9;
+  ghosts[3].direction = DIR_UP;
+  ghosts[3].in_house = true;
+  ghosts[3].is_eaten = false;
+  ghosts[3].exit_time = millis() + 9000;  // exits after 9s
 
 }
 
@@ -549,6 +562,27 @@ void enter_eaten_mode(Ghost* ghost){
 }
 
 void move_ghosts(){
+  unsigned long now = millis();
+
+  // Handle frightened timeout → back to scatter
+  if (ghost_mode == 2 && (now - frightened_start >= FRIGHTENED_DURATION)) {
+    ghost_mode = 1;
+    ghost_mode_start = now;
+    reverse = true;
+    ghosts_eaten_combo = 0;
+  }
+
+  // Handle scatter/chase cycling
+  if (ghost_mode == 0 && (now - ghost_mode_start >= CHASE_DURATION)) {
+    ghost_mode = 1;
+    ghost_mode_start = now;
+    reverse = true;
+  } else if (ghost_mode == 1 && (now - ghost_mode_start >= SCATTER_DURATION)) {
+    ghost_mode = 0;
+    ghost_mode_start = now;
+    reverse = true;
+  }
+
   for(int i = 0; i < 4; i++){
     Ghost* ghost = &ghosts[i]; 
 
@@ -570,7 +604,7 @@ void move_ghosts(){
     switch (ghost_mode) {
       case 0: //chase
 
-        if(reverse){//I make one for start of the mode and other for end
+        if(reverse){
           reverce_direction(ghost);
         }
 
@@ -655,10 +689,18 @@ void move_pacman() {
         game_map[pacman.y][pacman.x] = E;
         score += 50;
         total_pellets--;
+        frightened_start = millis();
         ghost_mode=2;
         reverse = true;
         ghosts_eaten_combo = 0;
         break;
+    }
+
+    for (int i = 0; i < 4; i++) {
+      if (!ghosts[i].in_house && !ghosts[i].is_eaten) {
+        check_collisions(&ghosts[i]);
+        if (game_over) return;
+      }
     }
   }else {
     pacman.current_direction= DIR_NONE;
@@ -692,10 +734,27 @@ void draw_map(){
 }
 
 void draw_ghost(Ghost* ghost){
+  unsigned long now = millis();
+  if (now - ghost_last_anim_time >= GHOST_ANIM_DELAY) {
+    ghost_anim_frame = !ghost_anim_frame;
+    ghost_last_anim_time = now;
+  }
+
   int gx = 2 + (ghost->x * map_grid);
   int gy = 14 + (ghost->y * map_grid);
+
+  const unsigned char* sprite;
+
+  if (ghost->is_eaten) {
+    sprite = ghost_eyes_bits;
+  } else if (ghost_mode == 2) {
+    sprite = ghost_anim_frame ? ghost_frightened_frame_2_bits: ghost_frightened_frame_1_bits;
+  } else {
+    sprite = ghost_anim_frame ? ghost_frame_2_bits: ghost_frame_1_bits;
+  }
+
+  u8g2.drawXBMP(gx, gy, 5, 4, sprite);  
   
-  u8g2.drawXBMP(gx, gy, map_grid, map_grid, ghost_bits);
 }
 
 void draw_pacman(){
@@ -781,9 +840,18 @@ void draw_gameover(){
   u8g2.firstPage();
   do {
     u8g2.setFont(u8g2_font_5x7_tf);
-    u8g2.drawStr(10, 30, "GAME OVER");
-    u8g2.setCursor(15, 45);
+
+    //show gameover
+    u8g2.drawStr(8, 30, "GAME OVER");
+
+    //show score
+    u8g2.setCursor(10, 45);
     u8g2.print("SCORE: ");
     u8g2.print(score);
+
+    //show continue instruction
+    u8g2.drawStr(8, 75, "Press any");
+    u8g2.drawStr(8, 90, "key..");
+
   } while (u8g2.nextPage());
 }
