@@ -1,7 +1,7 @@
 # Arduino Pacman 👻
 
 <p align="center">
-  <img src="./Assets/gameplay.gif" alt="gameplay" />
+  <img src="./Assets/gameplay.webp" alt="gameplay" />
 </p>
 
 <p align="center">
